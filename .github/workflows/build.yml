@@ -9,28 +9,51 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Android SDK + NDK
+      - name: Extract project ZIP
+        run: |
+          mkdir -p extracted
+          unzip -o anm2ed-3.0.zip -d extracted
+          find extracted -name gradlew -type f
+
+      - name: Locate Android project
+        run: |
+          GRADLEW=$(find extracted -name gradlew -type f | head -n 1)
+          if [ -z "$GRADLEW" ]; then
+            echo "ERROR: No se encontró gradlew"
+            exit 1
+          fi
+          echo "PROJECT_DIR=$(dirname "$GRADLEW")" >> "$GITHUB_ENV"
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
         with:
-          ndk-version: r28b
-          api-level: 36
-          build-tools-version: 36.0.0
+          packages: |
+            platforms;android-36
+            build-tools;36.0.0
+            ndk;28.2.13676358
 
-      - name: Build Debug APK
+      - name: Build APK
         run: |
-          cd anm2ed-3.0/android
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          chmod +x "$PROJECT_DIR/gradlew"
+          cd "$PROJECT_DIR"
+          ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: anm2ed-debug
-          path: anm2ed-3.0/android/app/build/outputs/apk/debug/app-debug.apk
+          name: anm2ed-debug-apk
+          path: extracted/**/app/build/outputs/apk/debug/app-debug.apk
           retention-days: 30
